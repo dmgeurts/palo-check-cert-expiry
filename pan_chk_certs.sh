@@ -244,71 +244,75 @@ done
 # Log the filtered results
 if [ ${#FILTERED_NAMES[@]} -eq 0 ]; then
     wlog "No certificates found expiring within the next $THRESHOLD_DAYS days.\n"
-fi
+else
+    wlog "Found certificates expiring within the next $THRESHOLD_DAYS days.\n"
 
-#    for i in "${!FILTERED_NAMES[@]}"; do
-#        echo "ALERT: ${FILTERED_NAMES[$i]} expires on ${FILTERED_DATES[$i]}"
-#    done
-
-# Set defaults in case not parsed or missing from config
-: ${EMAIL:="yes"}
-: ${BODY_HEADER:="Dear recipient,\n\nPlease check if the following certificates are still required. Renew if required, or delete if no longer in use:\n"}
-: ${BODY_FOOTER:="\n-- \nRegards,\n$(hostname)"}
-: ${SENDER:="pan_chk_certs.sh <$(id -un)@$(hostname)>"}
-
-# Test if at least one email address is configured if the send flag is set
-if [[ "$EMAIL" == "yes" ]]; then
-    if [ ${#TO[@]} -eq 0 ]; then
-        wlog "ERROR: No email address(es) found in config file: $CNF\n"
-        exit 1
-    fi
-    SEND_TO=()
-    for i in "${!TO[@]}"; do
-        # Grab the base address if 'pretty' formatting is given.
-        addr=$(echo "${TO[$i]}" | cut -d "<" -f2 | cut -d ">" -f1)
-        if [[ "$addr" =~ ^.+@.+\.[[:alpha:]]{2,}$ ]]; then
-            # Test if the domain has an MX record
-            if host -t MX ${addr##*@} &> /dev/null; then
-                # Found an MX record, use it.
-                SEND_TO+=($addr)
-            else
-                # Ignore invalid addresses
-                wlog "WARNING: No MX record found for $addr, skipping this email address.\n"
-            fi
-        else
-            wlog "WARNING: $addr is not a valid email address.\n"
-        fi
+    ## Compile list of expired certificates
+    BODY=""
+    # Find the length of the longest element in the array
+    max=1
+    for i in "${FILTERED_NAMES[@]}"; do
+        len=${#i}
+        ((len > max)) && max=$len
     done
-    if [ ${#SEND_TO[@]} -eq 0 ]; then
-        wlog "ERROR: No valid email addresses found in configuration file: $CNF\n"
-        wlog "WARNING: No email will be sent.\n"
-        #SEND="no"
+    # add a 2 character wide spacing
+    max=$((max+2))
+    # Get the number of elements in the array
+    items=${#FILTERED_NAMES[@]}
+    # Iterate through the indices (0 to num_items-1)
+    for ((i=0; i<$num_items; i++)); do
+        # Format the current line using printf and append it to the variable
+        # %-10s formats a left-aligned string in a 10-char width column
+        line=$(printf "%-${max}s - expires on: %s\n" "${column1_data[i]}" "${column2_data[i]}")
+        BODY+="$line"
+    done
+    
+    if [ -n "$CFG_FILE" ]; then
+        # If a config file is parsed
+        # Set defaults in case not parsed or missing from config
+        : ${EMAIL:="yes"}
+        : ${BODY_HEADER:="Dear recipient,\n\nPlease check if the following certificates are still required. Renew if required, or delete if no longer in use:\n"}
+        : ${BODY_FOOTER:="\n-- \nRegards,\n$(hostname)"}
+        : ${SENDER:="pan_chk_certs.sh <$(id -un)@$(hostname)>"}
+        
+        # Test if at least one email address is configured if the send flag is set
+        if [[ "$EMAIL" == "yes" ]]; then
+            if [ ${#TO[@]} -eq 0 ]; then
+                wlog "ERROR: No email address(es) found in config file: $CNF\n"
+                exit 1
+            fi
+            SEND_TO=()
+            for i in "${!TO[@]}"; do
+                # Grab the base address if 'pretty' formatting is given.
+                addr=$(echo "${TO[$i]}" | cut -d "<" -f2 | cut -d ">" -f1)
+                if [[ "$addr" =~ ^.+@.+\.[[:alpha:]]{2,}$ ]]; then
+                    # Test if the domain has an MX record
+                    if host -t MX ${addr##*@} &> /dev/null; then
+                        # Found an MX record, use it.
+                        SEND_TO+=($addr)
+                    else
+                        # Ignore invalid addresses
+                        wlog "WARNING: No MX record found for $addr, skipping this email address.\n"
+                    fi
+                else
+                    wlog "WARNING: $addr is not a valid email address.\n"
+                fi
+            done
+            if [ ${#SEND_TO[@]} -eq 0 ]; then
+                wlog "ERROR: No valid email addresses found in configuration file: $CNF\n"
+                wlog "WARNING: No email will be sent.\n"
+                #SEND="no"
+            else
+                # Set the email subject line
+                SUBJECT="ALERT: Expired firewall certificates found."
+                # Send the email
+                printf "$BODY_HEADER\n\n$BODY\n\n$BODY_FOOTER\n" | s-nail -s "$SUBJECT" -r "$SENDER" "${SEND_TO[@]}"
+                wlog "Email sent to: ${SEND_TO[@]}\n"
+            fi
+        fi
     else
-        # Set the email subject line
-        SUBJECT="ALERT: Expired firewall certificates found."
-
-        ## Compile the email body
-        BODY=""
-        # Find the length of the longest element in the array
-        max=1
-        for i in "${FILTERED_NAMES[@]}"; do
-            len=${#i}
-            ((len > max)) && max=$len
-        done
-        # add a 2 character wide spacing
-        max=$((max+2))
-        # Get the number of elements in the array
-        items=${#FILTERED_NAMES[@]}
-        # Iterate through the indices (0 to num_items-1)
-        for ((i=0; i<$num_items; i++)); do
-            # Format the current line using printf and append it to the variable
-            # %-10s formats a left-aligned string in a 10-char width column
-            line=$(printf "%-${max}s - expires on: %s\n" "${column1_data[i]}" "${column2_data[i]}")
-            BODY+="$line"
-        done
-
-        # Send the email
-        printf "$BODY_HEADER\n\n$BODY\n\n$BODY_FOOTER\n" | s-nail -s "$SUBJECT" -r "$SENDER" "${SEND_TO[@]}"
-        wlog "Email sent to: ${SEND_TO[@]}\n"
+        # If no config file is parsed, print found certificates to stdout and exit
+        echo "$BODY"
+        echo "--- done ---"
     fi
 fi
