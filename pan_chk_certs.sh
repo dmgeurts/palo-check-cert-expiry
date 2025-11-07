@@ -234,13 +234,12 @@ for i in "${!CERT_NAMES[@]}"; do
     NAME="${CERT_NAMES[$i]}"
     EXPIRY_EPOCH="${EXPIRY_EPOCHS[$i]}"
     # Check if the certificate epoch time is less than the set threshold
-    if [[ "$EXPIRY_EPOCH" -lt "$EXPIRY_THRESHOLD" ]]; then
+    if [[ "$EXPIRY_EPOCH" -lt "$THRESHOLD_EPOCH" ]]; then
         # Convert epoch back to a human-readable date for display
         HUMAN_DATE=$(date -d "@$EXPIRY_EPOCH")
         # Add to filtered arrays
         FILTERED_NAMES+=("$NAME")
         FILTERED_DATES+=("$HUMAN_DATE")
-        (( $VERBOSE > 0 )) && wlog " - $NAME expires on $HUMAN_DATE.\n"
     fi
 done
 
@@ -261,13 +260,12 @@ else
     # add a 2 character wide spacing
     max=$((max+2))
     # Get the number of elements in the array
-    items=${#FILTERED_NAMES[@]}
+    num_items=${#FILTERED_NAMES[@]}
     # Iterate through the indices (0 to num_items-1)
     for ((i=0; i<$num_items; i++)); do
         # Format the current line using printf and append it to the variable
-        # %-10s formats a left-aligned string in a 10-char width column
-        line=$(printf "%-${max}s - expires on: %s\n" "${column1_data[i]}" "${column2_data[i]}")
-        BODY+="$line"
+        # %-##s formats a left-aligned string in a ##-char wide column
+        BODY+="$(printf "%-${max}s - expires on: %s" "${FILTERED_NAMES[i]}" "${FILTERED_DATES[i]}")\n"
     done
     
     if [ -n "$CFG_FILE" ]; then
@@ -315,7 +313,7 @@ else
         fi
     else
         # If no config file is parsed, print found certificates to stdout and exit
-        echo "$BODY"
+        printf "$BODY"
         echo "--- done ---"
     fi
 fi
