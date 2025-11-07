@@ -157,7 +157,7 @@ if [ -n $CFG_FILE ]; then
     # Try to read send_email boolean flag from config file (yes/no)
     if grep -q -P '^email_enable=' "$CFG_FILE"; then
         EMAIL=$(grep -P '^email_enable=' "$CFG_FILE")
-        if [[ "$EMAIL" == "true" ]] && EMAIL="yes"
+        [[ "$EMAIL" == "true" ]] && EMAIL="yes"
         (( $VERBOSE > 0 )) && wlog "email_enable=$EMAIL read from: $CFG_FILE\n"
     fi
     # Try to read email body header from config file
