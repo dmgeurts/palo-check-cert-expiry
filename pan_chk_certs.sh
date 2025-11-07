@@ -1,6 +1,8 @@
 #!/bin/bash
-
 # Check Certs on Palo Alto Firewalls and alert if nearing expiry date
+
+## Requirements
+# Installed packages: openssl, pan-python, xmllint (libxml2-utils)
 
 ## Fixed variables
 # Reuse pan_instcert API key
@@ -153,11 +155,32 @@ if [ -n $CFG_FILE ]; then
         CRT_FLT="${CRT_FLT#crt_name_filter=}"
         (( $VERBOSE > 0 )) && wlog "Certificate name filter \"$CRT_FLT\" found in: $CFG_FILE\n"
     fi
-    # GTry to read alerting threshold from config file
+    # Try to read alerting threshold from config file
     if grep -q -P '^alert_after_days=' "$CFG_FILE"; then
         THRESHOLD_DAYS=$(grep -P '^alert_after_days=' "$CFG_FILE")
         THRESHOLD_DAYS="${THRESHOLD_DAYS#crt_name_filter=}"
         (( $VERBOSE > 0 )) && wlog "Certificate expiry threshold set to $THRESHOLD_DAYS days\n"
+    fi
+    # Try to read send_email boolean flag from config file (yes/no)
+    if grep -q -P '^email_enable=' "$CFG_FILE"; then
+        EMAIL=$(grep -P '^email_enable=' "$CFG_FILE")
+        if [[ "$EMAIL" == "true" ]] && EMAIL="yes"
+        (( $VERBOSE > 0 )) && wlog "email_enable=$EMAIL read from: $CFG_FILE\n"
+    fi
+    # Try to read email body header from config file
+    if grep -q -P '^email_body_header=' "$CFG_FILE"; then
+        BODY_HEADER=$(grep -P '^email_body_header=' "$CFG_FILE")
+        (( $VERBOSE > 0 )) && wlog "email_body_header read from: $CFG_FILE\n"
+    fi
+    # Try to read email body footer from config file
+    if grep -q -P '^email_body_footer=' "$CFG_FILE"; then
+        BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE")
+        (( $VERBOSE > 0 )) && wlog "email_body_footer read from: $CFG_FILE\n"
+    fi
+    # Try to read email body footer from config file
+    if grep -q -P '^email_from=' "$CFG_FILE"; then
+        EMAIL_SENDER=$(grep -P '^email_from=' "$CFG_FILE")
+        (( $VERBOSE > 0 )) && wlog "email_from=$EMAIL_SENDER setting read from: $CFG_FILE\n"
     fi
 fi
 
@@ -171,30 +194,9 @@ if [[ "$API_KEY" == "/etc/ipa/.panrc" ]]; then
     exit 5
 fi
 
-## Requirements
-# Installed packages: openssl, pan-python, xmllint (libxml2-utils)
-
-## CURL
-OUTPUT=$(curl -k --form file=@$TEMP_PFX "https://$PAN_MGMT/api/?type=import&category=certificate&certificate-name=$CERT_NAME&format=pkcs12&passphrase=$TEMP_PWD&key=$API_KEY" && echo " ")
-CRT_STATUS=$?
-wlog "XML API output for crt: $OUTPUT\n"
-if [ $CRT_STATUS -eq 0 ]; then
-    OUTPUT=$(curl -k --form file=@$TEMP_PFX "https://$PAN_MGMT/api/?type=import&category=private-key&certificate-name=$CERT_NAME&format=pkcs12&passphrase=$TEMP_PWD&key=$API_KEY" && echo " ")
-    KEY_STATUS=$?
-    wlog "XML API output for key: $OUTPUT\n"
-    if [ $KEY_STATUS -eq 0 ]; then
-        wlog "Finished uploading certificate: $CERT_NAME\n"
-    elif [ $KEY_STATUS -ne 0 ]; then
-        wlog "ERROR: Upload of key failed.\n"
-        exit 12
-    fi
-else
-    wlog "ERROR: Upload of certificate failed.\n"
-    exit 12
-fi
-
 ## Fetch certificate expiry dates using panxapi.py
-# Filter by certificate name
+
+# Filter by certificate name:
 XML_DATA=$(/usr/local/bin/panxapi.py -h $PAN_MGMT -K $API_KEY -gx "/config/shared/certificate/entry[contains(@name, '$CRT_FLT' )]" 2>&1)
 
 # Or filter by issuer:
@@ -226,198 +228,94 @@ THRESHOLD_SEC=$((THRESHOLD_DAYS * 86400))
 NOW=$(date +%s)
 THRESHOLD_EPOCH=$((NOW + THRESHOLD_SEC))
 
-wlog "Found the following certificates expiring within $THRESHOLD_DAYS days (before $(date -d "@$THRESHOLD_EPOCH")).\n"
-
-# --- 4. Filter and Output Results ---
+## Filter results
+(( $VERBOSE > 0 )) && wlog "Found these certificates expiring within $THRESHOLD_DAYS days (before $(date -d "@$THRESHOLD_EPOCH")).\n"
 
 FILTERED_NAMES=()
 FILTERED_DATES=()
-
 # Iterate through the array indices
 for i in "${!CERT_NAMES[@]}"; do
     NAME="${CERT_NAMES[$i]}"
     EXPIRY_EPOCH="${EXPIRY_EPOCHS[$i]}"
-
-    # Check if the certificate epoch time is less than our 30-day threshold
+    # Check if the certificate epoch time is less than the set threshold
     if [[ "$EXPIRY_EPOCH" -lt "$EXPIRY_THRESHOLD" ]]; then
         # Convert epoch back to a human-readable date for display
         HUMAN_DATE=$(date -d "@$EXPIRY_EPOCH")
-        
         # Add to filtered arrays
         FILTERED_NAMES+=("$NAME")
         FILTERED_DATES+=("$HUMAN_DATE")
+        (( $VERBOSE > 0 )) && wlog " - $NAME expires on $HUMAN_DATE.\n"
     fi
 done
 
-# --- 5. Display the filtered results ---
+# Log the filtered results
 if [ ${#FILTERED_NAMES[@]} -eq 0 ]; then
-    echo "No certificates found expiring within the next 30 days."
-else
-    for i in "${!FILTERED_NAMES[@]}"; do
-        echo "ALERT: ${FILTERED_NAMES[$i]} expires on ${FILTERED_DATES[$i]}"
-    done
+    wlog "No certificates found expiring within the next $THRESHOLD_DAYS days.\n"
 fi
 
+#    for i in "${!FILTERED_NAMES[@]}"; do
+#        echo "ALERT: ${FILTERED_NAMES[$i]} expires on ${FILTERED_DATES[$i]}"
+#    done
 
+# Set defaults in case not parsed or missing from config
+: ${EMAIL:="yes"}
+: ${BODY_HEADER:="Dear recipient,\n\nPlease check if the following certificates are still required. Renew if required, or delete if no longer in use:\n"}
+: ${BODY_FOOTER:="\n-- \nRegards,\n$(hostname)"}
+: ${SENDER:="pan_chk_certs.sh <$(id -un)@$(hostname)>"}
 
-
-
-
-# Extract certificate names to array
-mapfile -t CERT_NAMES < <(echo "$JSON_DATA" | jq -r '.[].name')
-
-# Extract certificate expiry to array
-mapfile -t EXPIRY_EPOCH < <(echo "$JSON_DATA" | jq -r '.[].expiry-epoch')
-
-if [[ ! -z $SSL_TLS_PROFILE_1 ]]; then
-    RESULT=$(/usr/local/bin/panxapi.py -h $PAN_MGMT -K $API_KEY -S "<certificate>$CERT_NAME</certificate>" "/config/shared/ssl-tls-service-profile/entry[@name='$SSL_TLS_PROFILE_1']" 2>&1)
-    (( $VERBOSE > 0 )) && wlog "$RESULT\n"
-    if [[ "$RESULT" =~ (command succeeded) ]]; then
-        PROFILES=$SSL_TLS_PROFILE_1
-        wlog "Successfully updated SSL/TLS Profile $SSL_TLS_PROFILE_1\n"
-    else
-        wlog "ERROR: Update of SSL/TLS Profile $SSL_TLS_PROFILE_1 failed.\n"
+# Test if at least one email address is configured if the send flag is set
+if [[ "$EMAIL" == "yes" ]]; then
+    if [ ${#TO[@]} -eq 0 ]; then
+        wlog "ERROR: No email address(es) found in config file: $CNF\n"
+        exit 1
     fi
-    if [[ ! -z $SSL_TLS_PROFILE_2 ]]; then
-        RESULT=$(/usr/local/bin/panxapi.py -h $PAN_MGMT -K $API_KEY -S "<certificate>$CERT_NAME</certificate>" "/config/shared/ssl-tls-service-profile/entry[@name='$SSL_TLS_PROFILE_2']" 2>&1)
-        (( $VERBOSE > 0 )) && wlog "$RESULT\n"
-        if [[ "$RESULT" =~ (command succeeded) ]]; then
-            PROFILES="$PROFILES $SSL_TLS_PROFILE_2"
-            wlog "Successfully updated SSL/TLS Profile $SSL_TLS_PROFILE_2\n"
+    SEND_TO=()
+    for i in "${!TO[@]}"; do
+        # Grab the base address if 'pretty' formatting is given.
+        addr=$(echo "${TO[$i]}" | cut -d "<" -f2 | cut -d ">" -f1)
+        if [[ "$addr" =~ ^.+@.+\.[[:alpha:]]{2,}$ ]]; then
+            # Test if the domain has an MX record
+            if host -t MX ${addr##*@} &> /dev/null; then
+                # Found an MX record, use it.
+                SEND_TO+=($addr)
+            else
+                # Ignore invalid addresses
+                wlog "WARNING: No MX record found for $addr, skipping this email address.\n"
+            fi
         else
-            wlog "ERROR: Update of SSL/TLS Profile $SSL_TLS_PROFILE_2 failed.\n"
+            wlog "WARNING: $addr is not a valid email address.\n"
         fi
+    done
+    if [ ${#SEND_TO[@]} -eq 0 ]; then
+        wlog "ERROR: No valid email addresses found in configuration file: $CNF\n"
+        wlog "WARNING: No email will be sent.\n"
+        #SEND="no"
+    else
+        # Set the email subject line
+        SUBJECT="ALERT: Expired firewall certificates found."
+
+        ## Compile the email body
+        BODY=""
+        # Find the length of the longest element in the array
+        max=1
+        for i in "${FILTERED_NAMES[@]}"; do
+            len=${#i}
+            ((len > max)) && max=$len
+        done
+        # add a 2 character wide spacing
+        max=$((max+2))
+        # Get the number of elements in the array
+        items=${#FILTERED_NAMES[@]}
+        # Iterate through the indices (0 to num_items-1)
+        for ((i=0; i<$num_items; i++)); do
+            # Format the current line using printf and append it to the variable
+            # %-10s formats a left-aligned string in a 10-char width column
+            line=$(printf "%-${max}s - expires on: %s\n" "${column1_data[i]}" "${column2_data[i]}")
+            BODY+="$line"
+        done
+
+        # Send the email
+        printf "$BODY_HEADER\n\n$BODY\n\n$BODY_FOOTER\n" | s-nail -s "$SUBJECT" -r "$SENDER" "${SEND_TO[@]}"
+        wlog "Email sent to: ${SEND_TO[@]}\n"
     fi
 fi
-
-
-
-
-from datetime import datetime
-from panos.firewall import Firewall
-import paloalto
-import smtplib
-
-# Firewall hosts
-firewall_endpoints = {
-    'prod': [
-        'prod.firewall.1',
-        'prod.firewall.2',
-        'prod.firewall.3',
-        'prod.firewall.4',
-        'prod.firewall.5'
-        ],
-    'test': [
-        'test.firewall.1'
-        ]
-    }
-firewall_hosts = firewall_endpoints['prod']  # Select firewall endpoints
-
-# List containers
-db_name = []
-db_exp_date = []
-
-# Counter
-counter = 0
-
-# Fetch todays date
-today = datetime.now()
-
-# Send mail using local postfix
-port = 25
-smtp_server = "localhost"
-sender_email = "Python@somedomain.com"
-receiver_email = "some.recipient@somedomain.com"
-message = """\
-From: {sender}
-Subject: Palo Alto Certificate Warning
-Date: {date}
-To: {recipient}
-
-There are {count} certificates nearing expiry!
-Please check all production Palo Alto firewalls
-for certificates nearing expiration.
-Palo Alto Primary Firewalls:
-{firewall}
-
-Certs nearing expiry:
-{certs}
-
-This message has been sent from Python."""
-
-
-# Create datetime object from string
-def get_datetime_object(dt_string):
-    """
-    Return datetime object from string
-
-    """
-    dt_object = datetime.strptime(dt_string, '%b %d %H:%M:%S %Y %Z')
-    return dt_object
-
-
-def check_expiring_certs(indict):
-    """
-    Check if certs on the firewall are nearing expiry within 30 days
-
-    """
-    global counter
-    cert_names = []
-    for k, v in indict.items():
-        diff = get_datetime_object(k[k.find("(")+1:k.find(")")]) - today
-        if diff.days <= 30:  # Expiry within days (30 standard)
-            counter = counter + 1
-            cert_names.append(v)
-    return cert_names
-
-
-for i in firewall_hosts:
-    while True:
-        try:
-            fw = Firewall(i, api_key=paloalto.return_token())
-            raw_data = fw.op('show sslmgr-store config-certificate-info')
-            data = raw_data.find('.//result')
-            cert_list = data.text.splitlines()
-            break
-        except Exception as e:
-            print(i, e)
-
-# Create Cert lists
-for cert in cert_list:
-    if 'db-exp-date' in cert:
-        db_exp_date.append(cert.strip())
-    elif 'db-name' in cert:
-        db_name.append(cert.strip())
-
-# Create Cert Dictionary
-cert_dict = dict(zip(db_exp_date, db_name))
-
-# Run function
-expiring_cert_list = check_expiring_certs(cert_dict)
-
-# Transform to set
-expiring_cert_set = set(expiring_cert_list)
-
-# Send an email if expiry is nearing 30 days
-if counter >= 1:
-    print('There are {0} certificates nearing expiry!'.format(counter))
-    try:
-        server = smtplib.SMTP(smtp_server, port)
-        server.ehlo()  # Can be omitted
-        server.sendmail(
-            sender_email,
-            receiver_email,
-            message.format(
-                sender=sender_email,
-                date=today,
-                recipient=receiver_email,
-                count=counter,
-                firewall='\n'.join(firewall_hosts),
-                certs='\n'.join(expiring_cert_set)
-                )
-            )
-    except Exception as e:
-        # Print any error messages to stdout
-        print(e)
-    finally:
-        server.quit()
