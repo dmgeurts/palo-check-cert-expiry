@@ -98,7 +98,7 @@ elif grep -q -P '(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$)' <
     fi
     PAN_MGMT+=("$HOST")
 else
-    wlog "ERROR: A valid PATH or FQDN is required to check certificates.\n"
+    wlog "ERROR: A valid configuration file (PATH) or FQDN is required to check certificates.\n"
     wlog "Parsed string: $@\n\n"
     show_help >&2
     exit 4
