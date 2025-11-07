@@ -72,7 +72,7 @@ wlog "START of pan_chk_certs.\n"
 
 # Check whether a file path or a single valid FQDN was parsed for the Palo Alto API interface
 CFG_FILE=""
-declare -a PAN_MGMT
+PAN_MGMT=()
 if [[ -f "$@" ]]; then
     #(( $VERBOSE > 0 )) && wlog "File exists: $@\n"
     if [[ -r "$@" ]]; then
@@ -124,7 +124,7 @@ if grep -q -P '^api_key=' "$API_KEY"; then
 fi
 
 # Read config file
-if [ -n $CFG_FILE ]; then
+if [ -n "$CFG_FILE" ]; then
     # Verify one or more hostnames are included in the config file
     if ! grep -q -P '^hosts=' "$CFG_FILE"; then
         wlog "ERROR: Missing 'hosts=' entry in in: $CFG_FILE\n"
@@ -178,7 +178,7 @@ if [ -n $CFG_FILE ]; then
 fi
 
 # Sanity check, at least one host must be known
-if [ ${PAN_MGMT[@]} -eq 0 ]; then
+if [ ${#PAN_MGMT[@]} -eq 0 ]; then
     wlog "ERROR: No hosts found, terminating.\n"
     exit 1
 fi
@@ -222,7 +222,7 @@ NOW=$(date +%s)
 THRESHOLD_EPOCH=$((NOW + THRESHOLD_SEC))
 
 ## Filter results
-(( $VERBOSE > 0 )) && wlog "Found these certificates expiring within $THRESHOLD_DAYS days (before $(date -d "@$THRESHOLD_EPOCH")).\n"
+(( $VERBOSE > 0 )) && wlog "Checking for certificates expiring within $THRESHOLD_DAYS days (before $(date -d "@$THRESHOLD_EPOCH")).\n"
 
 FILTERED_NAMES=()
 FILTERED_DATES=()
