@@ -37,9 +37,6 @@ Either of the following must be provided:
     PATH              Path to config file.
 
 OPTIONS:
-    -c CERT_CN        Common Name (Subject) of the certificate to be checked.
-    -n CERT_NAME      Name of the certificate in PanOS configuration. Defaults to the
-                      certificate Common Name.
     -k key(path|ext)  API key file location or extension.
 
     -h                Display this help and exit.
@@ -50,10 +47,6 @@ EOF
 ## Read/interpret optional arguments
 while getopts c:n:Yp:s:k:C:K:vh opt; do
     case $opt in
-        c)  CERT_CN=$OPTARG
-            ;;
-        n)  CERT_NAME=$OPTARG
-            ;;
         k)  API_KEY=$OPTARG
             ;;
         v)  VERBOSE=$((VERBOSE+1))
