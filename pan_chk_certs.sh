@@ -38,6 +38,7 @@ Either of the following must be provided:
 
 OPTIONS:
     -k key(path|ext)  API key file location or extension.
+    -t days           Threshold in number of days
 
     -h                Display this help and exit.
     -v                Verbose mode.
@@ -45,9 +46,11 @@ EOF
 }
 
 ## Read/interpret optional arguments
-while getopts c:n:Yp:s:k:C:K:vh opt; do
+while getopts k:t:vh opt; do
     case $opt in
         k)  API_KEY=$OPTARG
+            ;;
+        t)  THRESHOLD_DAYS=$OPTARG
             ;;
         v)  VERBOSE=$((VERBOSE+1))
             ;;
