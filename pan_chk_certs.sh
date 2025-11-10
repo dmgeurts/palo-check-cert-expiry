@@ -180,28 +180,35 @@ if [ -n "$CFG_FILE" ]; then
     # Try to read send_email boolean flag from config file (yes/no)
     if grep -q -P '^email_enable=' "$CFG_FILE"; then
         EMAIL=$(grep -P '^email_enable=' "$CFG_FILE")
+        EMAIL="${EMAIL#email_enable=}"
         [[ "$EMAIL" == "true" ]] && EMAIL="yes"
         (( $VERBOSE > 0 )) && wlog "email_enable=$EMAIL read from: $CFG_FILE\n"
     fi
     # Try to read email body header from config file
     if grep -q -P '^email_body_header=' "$CFG_FILE"; then
         BODY_HEADER=$(grep -P '^email_body_header=' "$CFG_FILE")
+        BODY_HEADER="${BODY_HEADER#email_body_header=}"
         (( $VERBOSE > 0 )) && wlog "email_body_header read from: $CFG_FILE\n"
     fi
     # Try to read email body footer from config file
     if grep -q -P '^email_body_footer=' "$CFG_FILE"; then
         BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE")
+        BODY_FOOTER="${BODY_FOOTER#email_body_footer=}"
         (( $VERBOSE > 0 )) && wlog "email_body_footer read from: $CFG_FILE\n"
     fi
     # Try to read email sender address from config file
     if grep -q -P '^email_from=' "$CFG_FILE"; then
         EMAIL_SENDER=$(grep -P '^email_from=' "$CFG_FILE")
+        EMAIL_SENDER="${EMAIL_SENDER#email_sender=}"
         (( $VERBOSE > 0 )) && wlog "email_from=$EMAIL_SENDER setting read from: $CFG_FILE\n"
     fi
     # Try to read email target address(es) from config file
     if grep -q -P '^email_to=' "$CFG_FILE"; then
-        EMAIL_TO=$(grep -P '^email_to=' "$CFG_FILE")
-        (( $VERBOSE > 0 )) && wlog "email_to=$EMAIL_TO setting read from: $CFG_FILE\n"
+        TO=$(grep -P '^email_to=' "$CFG_FILE")
+        TO="${TO#email_to=}"
+        # Accept comma and space-separated input, and convert to an array for looping
+        EMAIL_TO=(${TO//,/ })
+        (( $VERBOSE > 0 )) && wlog "email_to=${EMAIL_TO[@]} setting read from: $CFG_FILE\n"
     fi
 fi
 
@@ -308,9 +315,9 @@ else
                 exit 1
             fi
             SEND_TO=()
-            for i in "${!TO[@]}"; do
+            for i in "${!EMAIL_TO[@]}"; do
                 # Grab the base address if 'pretty' formatting is given.
-                addr=$(echo "${TO[$i]}" | cut -d "<" -f2 | cut -d ">" -f1)
+                addr=$(echo "${EMAIL_TO[$i]}" | cut -d "<" -f2 | cut -d ">" -f1)
                 if [[ "$addr" =~ ^.+@.+\.[[:alpha:]]{2,}$ ]]; then
                     # Test if the domain has an MX record
                     if host -t MX ${addr##*@} &> /dev/null; then
