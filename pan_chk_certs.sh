@@ -27,8 +27,8 @@ trap 'wlog "ERROR - Certificate check failed.\n"' TERM HUP
 show_help() {
 cat << EOF
 Usage: ${0##*/} [-hv] [OPTIONS] FQDN/PATH
-This script checks whether any certificates are about to expire on a Palo Alto firewall
-or Panorama. Optionally, the expiry date of an individual certificate can be checked.
+This script checks whether any certificates will expire within x days on a Palo Alto firewall
+or Panorama.
 
 Either of the following must be provided:
     FQDN              Fully qualified name of the Palo Alto firewall or Panorama
@@ -37,8 +37,11 @@ Either of the following must be provided:
     PATH              Path to config file.
 
 OPTIONS:
-    -k key(path|ext)  API key file location or extension.
-    -t days           Threshold in number of days
+    -k key(path|ext)  API key file location or extension. Default: /etc/ipa/.panrc
+                      If a string is parsed, the following paths are searched:
+                      {key(path)}/.panrc         - Example: /etc/panos/fw1.local/.panrc
+                      /etc/ipa/.panrc.{key(ext)} - Example: /etc/ipa/,panrc.fw1.local
+    -t days           Threshold in number of days. (default: 30)
 
     -h                Display this help and exit.
     -v                Verbose mode.
@@ -173,7 +176,7 @@ if [ -n "$CFG_FILE" ]; then
         BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE")
         (( $VERBOSE > 0 )) && wlog "email_body_footer read from: $CFG_FILE\n"
     fi
-    # Try to read email body footer from config file
+    # Try to read email sender address from config file
     if grep -q -P '^email_from=' "$CFG_FILE"; then
         EMAIL_SENDER=$(grep -P '^email_from=' "$CFG_FILE")
         (( $VERBOSE > 0 )) && wlog "email_from=$EMAIL_SENDER setting read from: $CFG_FILE\n"
