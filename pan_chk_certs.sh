@@ -133,11 +133,10 @@ if [[ "$API_KEY" != "/etc/ipa/.panrc" ]]; then
         exit 1
     fi
 fi 
-
-# Try to read API_KEY
+# Try to read API_KEY from file
 if grep -q -P '^api_key=' "$API_KEY"; then
-    (( $VERBOSE > 0 )) && wlog "API key found in: $API_KEY\n"
-    # Commit the cardinal sin of changing the type of the variable from file-path to string.
+    (( $VERBOSE > 0 )) && wlog "API key read from file: $API_KEY\n"
+    # Change the variable from file-path to the actual API KEY string
     API_KEY=$(grep -P '^api_key=' "$API_KEY")
     API_KEY="${API_KEY#api_key=}"
 fi
@@ -160,7 +159,7 @@ if [ -n "$CFG_FILE" ]; then
         fi
     fi
     # Try to read API key from config file if one isn't parsed
-    if grep -q -P '^api_key=' "$CFG_FILE"; then
+    if [[ "$API_KEY" == "/etc/ipa/.panrc" ]] && grep -q -P '^api_key=' "$CFG_FILE"; then
         (( $VERBOSE > 0 )) && wlog "API key found in: $CFG_FILE\n"
         API_KEY=$(grep -P '^api_key=' "$CFG_FILE")
         API_KEY="${API_KEY#api_key=}"
@@ -212,8 +211,15 @@ if [ -n "$CFG_FILE" ]; then
     fi
 fi
 
+# Throw an error if an API_KEY is not yet found
+if [[ "$API_KEY" == "/etc/ipa/.panrc" ]]; then
+    wlog "ERROR: No API KEY parsed and/or found.\n"
+    show_help >&2
+    exit 1
+fi
+
 # Sanity check, at least one host must be known
-if [ ${#PAN_MGMT[@]} -eq 0 ]; then
+if [ -z "$PAN_MGMT" ]; then
     wlog "ERROR: No host found, terminating.\n"
     exit 1
 fi
