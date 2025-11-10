@@ -286,7 +286,7 @@ done
 if [ ${#FILTERED_NAMES[@]} -eq 0 ]; then
     wlog "No certificates found expiring within the next $THRESHOLD_DAYS days.\n"
 else
-    wlog "Found certificates expiring within the next $THRESHOLD_DAYS days.\n"
+    wlog "Found certificates expiring within the next $THRESHOLD_DAYS days:\n"
 
     ## Compile list of expired certificates
     BODY=""
