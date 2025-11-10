@@ -170,31 +170,21 @@ if [ -n "$CFG_FILE" ]; then
         CRT_FLT=$(grep -P '^crt_name_filter=' "$CFG_FILE")
         CRT_FLT="${CRT_FLT#crt_name_filter=}"
         (( $VERBOSE > 0 )) && wlog "Certificate name filter \"$CRT_FLT\" found in: $CFG_FILE\n"
+    else
+        (( $VERBOSE > 0 )) && wlog "Default certificate name filter \"$CRT_FLT\" will be used.\n"
     fi
     # Try to read alerting threshold from config file
     if grep -q -P '^alert_after_days=' "$CFG_FILE"; then
         THRESHOLD_DAYS=$(grep -P '^alert_after_days=' "$CFG_FILE")
-        THRESHOLD_DAYS="${THRESHOLD_DAYS#crt_name_filter=}"
+        THRESHOLD_DAYS="${THRESHOLD_DAYS#alert_after_days=}"
         (( $VERBOSE > 0 )) && wlog "Certificate expiry threshold set to $THRESHOLD_DAYS days\n"
     fi
     # Try to read send_email boolean flag from config file (yes/no)
     if grep -q -P '^email_enable=' "$CFG_FILE"; then
         EMAIL=$(grep -P '^email_enable=' "$CFG_FILE")
         EMAIL="${EMAIL#email_enable=}"
-        [[ "$EMAIL" == "true" ]] && EMAIL="yes"
         (( $VERBOSE > 0 )) && wlog "email_enable=$EMAIL read from: $CFG_FILE\n"
-    fi
-    # Try to read email body header from config file
-    if grep -q -P '^email_body_header=' "$CFG_FILE"; then
-        BODY_HEADER=$(grep -P '^email_body_header=' "$CFG_FILE")
-        BODY_HEADER="${BODY_HEADER#email_body_header=}"
-        (( $VERBOSE > 0 )) && wlog "email_body_header read from: $CFG_FILE\n"
-    fi
-    # Try to read email body footer from config file
-    if grep -q -P '^email_body_footer=' "$CFG_FILE"; then
-        BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE")
-        BODY_FOOTER="${BODY_FOOTER#email_body_footer=}"
-        (( $VERBOSE > 0 )) && wlog "email_body_footer read from: $CFG_FILE\n"
+        [[ "$EMAIL" == "true" ]] && EMAIL="yes"
     fi
     # Try to read email sender address from config file
     if grep -q -P '^email_from=' "$CFG_FILE"; then
@@ -209,6 +199,18 @@ if [ -n "$CFG_FILE" ]; then
         # Accept comma and space-separated input, and convert to an array for looping
         EMAIL_TO=(${TO//,/ })
         (( $VERBOSE > 0 )) && wlog "email_to=${EMAIL_TO[@]} setting read from: $CFG_FILE\n"
+    fi
+    # Try to read email body header from config file
+    if grep -q -P '^email_body_header=' "$CFG_FILE"; then
+        BODY_HEADER=$(grep -P '^email_body_header=' "$CFG_FILE")
+        BODY_HEADER="${BODY_HEADER#email_body_header=}"
+        (( $VERBOSE > 0 )) && wlog "email_body_header read from: $CFG_FILE\n"
+    fi
+    # Try to read email body footer from config file
+    if grep -q -P '^email_body_footer=' "$CFG_FILE"; then
+        BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE")
+        BODY_FOOTER="${BODY_FOOTER#email_body_footer=}"
+        (( $VERBOSE > 0 )) && wlog "email_body_footer read from: $CFG_FILE\n"
     fi
 fi
 
@@ -313,7 +315,7 @@ else
         : ${EMAIL:="no"}
         : ${BODY_HEADER:="Dear recipient,\n\nPlease check if the following certificates are still required. Renew if required, or delete if no longer in use:\n"}
         : ${BODY_FOOTER:="\n-- \nRegards,\n$(hostname)"}
-        : ${SENDER:="${0##*/} <$(id -un)@$(hostname)>"}
+        : ${EMAIL_SENDER:="${0##*/} <$(id -un)@$(hostname)>"}
         
         # Test if at least one email address is configured if the send flag is set
         if [[ "$EMAIL" == "yes" ]]; then
@@ -346,13 +348,15 @@ else
                 # Set the email subject line
                 SUBJECT="ALERT: Expired firewall certificates found."
                 # Send the email
-                printf "$BODY_HEADER\n\n$BODY\n\n$BODY_FOOTER\n" | s-nail -s "$SUBJECT" -r "$SENDER" "${SEND_TO[@]}"
+                printf "$BODY_HEADER\n\n$BODY\n\n$BODY_FOOTER\n" | s-nail -s "$SUBJECT" -r "$EMAIL_SENDER" "${SEND_TO[@]}"
                 wlog "Email sent to: ${SEND_TO[@]}\n"
             fi
+        else
+            # If no email is to be sent, print found certificates to stdout
+            printf "$BODY--- done ---\n"
         fi
     else
-        # If no config file is parsed, print found certificates to stdout and exit
-        printf "$BODY"
-        echo "--- done ---"
+        # If no config file is parsed, print found certificates to stdout
+        printf "$BODY--- done ---\n"
     fi
 fi
