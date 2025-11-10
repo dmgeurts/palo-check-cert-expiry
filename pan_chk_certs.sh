@@ -127,7 +127,7 @@ if [[ "$API_KEY" != "/etc/ipa/.panrc" ]]; then
         API_KEY="/etc/ipa/.panrc.$API_KEY"
     fi
     if [ -f "$API_KEY" ]; then
-        wlog "Parsed API key file exists: $API_KEY\n"
+        #wlog "Parsed API key file exists: $API_KEY\n"
     else
         wlog "ERROR: Parsed API key file doesn't exist: $API_KEY\n"
         show_help >&2
