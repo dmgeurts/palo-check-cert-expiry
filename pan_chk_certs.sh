@@ -71,13 +71,14 @@ shift "$((OPTIND-1))"   # Discard the options and sentinel --
 PAN_MGMT=""
 chk_host() {
     if grep -q -P '(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$)' <<< "$1"; then
+        echo "$1"
         # Convert to lowercase
-        local _host="${$1,,}"
+        local _host="${1,,}"
         if ! nc -z $_host 443 2>/dev/null; then
             wlog "ERROR: Palo Alto device unreachable at: https://$_host/\n"
             exit 4 
         fi
-        PAN_MGMT="_host"
+        PAN_MGMT="$_host"
         return 0 # Success
     else
         wlog "ERROR: '$1' is not a valid FQDN/hostname format.\n"
