@@ -67,6 +67,25 @@ while getopts k:t:vh opt; do
 done
 shift "$((OPTIND-1))"   # Discard the options and sentinel --
 
+## Host checks
+PAN_MGMT=""
+chk_host() {
+    if grep -q -P '(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$)' <<< "$1"; then
+        # Convert to lowercase
+        local _host="${$1,,}"
+        if ! nc -z $_host 443 2>/dev/null; then
+            wlog "ERROR: Palo Alto device unreachable at: https://$_host/\n"
+            exit 4 
+        fi
+        PAN_MGMT="_host"
+        return 0 # Success
+    else
+        wlog "ERROR: '$1' is not a valid FQDN/hostname format.\n"
+        # If the format is wrong, exit the script as it can't proceed
+        return 1 # Failed
+    fi
+}
+
 ## Check if run as root
 if [ "$EUID" -ne 0 ]; then
     echo "We have root"
@@ -78,9 +97,7 @@ wlog "START of pan_chk_certs.\n"
 
 # Check whether a file path or a single valid FQDN was parsed for the Palo Alto API interface
 CFG_FILE=""
-PAN_MGMT=()
 if [[ -f "$@" ]]; then
-    #(( $VERBOSE > 0 )) && wlog "File exists: $@\n"
     if [[ -r "$@" ]]; then
         CFG_FILE="$@"
         (( $VERBOSE > 0 )) && wlog "CFG_FILE: $CFG_FILE\n"
@@ -88,14 +105,10 @@ if [[ -f "$@" ]]; then
         wlog "ERROR: File cannot be read: $@\n"
         exit 4
     fi        
-elif grep -q -P '(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$)' <<< "$@"; then
-    HOST="${@,,}"
-    (( $VERBOSE > 0 )) && wlog "PAN_FQDN: $HOST\n"
-    if ! nc -z $HOST 443 2>/dev/null; then
-        wlog "ERROR: Palo Alto device unreachable at: https://$HOST/\n"
-        exit 4
-    fi
-    PAN_MGMT+=("$HOST")
+    #(( $VERBOSE > 0 )) && wlog "File exists and can be read: $@\n"
+elif chk_host "$@"; then
+    # PAN_MGMT is now set and tested as reachable
+    (( $VERBOSE > 0 )) && wlog "Host $PAN_MGMT is reachable.\n"
 else
     wlog "ERROR: A valid configuration file (PATH) or FQDN is required to check certificates.\n"
     wlog "Parsed string: $@\n\n"
@@ -131,16 +144,20 @@ fi
 
 # Read config file
 if [ -n "$CFG_FILE" ]; then
-    # Verify one or more hostnames are included in the config file
-    if ! grep -q -P '^hosts=' "$CFG_FILE"; then
-        wlog "ERROR: Missing 'hosts=' entry in in: $CFG_FILE\n"
+    # Verify a hostname is included in the config file
+    if ! grep -q -P '^host=' "$CFG_FILE"; then
+        wlog "ERROR: Missing 'host=' entry in in: $CFG_FILE\n"
         exit 5
     else
-        (( $VERBOSE > 0 )) && wlog "One or more hosts found in: $CFG_FILE\n"
-        HOSTS=$(grep -P '^hosts=' "$CFG_FILE")
-        HOSTS="${HOSTS#hosts=}"
-        # Accept comma and space-separated input, and convert to an array for looping
-        PAN_MGMT=(${HOSTS//,/ })
+        HOST=$(grep -P '^host=' "$CFG_FILE")
+        HOST="${HOST#host=}"
+        if chk_host "$HOST"; then
+            # PAN_MGMT is now set and tested as reachable
+            (( $VERBOSE > 0 )) && wlog "Host $PAN_MGMT found in $CFG_FILE is reachable.\n"
+        else
+            # Error is already logged
+            exit 4
+        fi
     fi
     # Try to read API key from config file if one isn't parsed
     if grep -q -P '^api_key=' "$CFG_FILE"; then
@@ -181,11 +198,16 @@ if [ -n "$CFG_FILE" ]; then
         EMAIL_SENDER=$(grep -P '^email_from=' "$CFG_FILE")
         (( $VERBOSE > 0 )) && wlog "email_from=$EMAIL_SENDER setting read from: $CFG_FILE\n"
     fi
+    # Try to read email target address(es) from config file
+    if grep -q -P '^email_to=' "$CFG_FILE"; then
+        EMAIL_TO=$(grep -P '^email_to=' "$CFG_FILE")
+        (( $VERBOSE > 0 )) && wlog "email_to=$EMAIL_TO setting read from: $CFG_FILE\n"
+    fi
 fi
 
 # Sanity check, at least one host must be known
 if [ ${#PAN_MGMT[@]} -eq 0 ]; then
-    wlog "ERROR: No hosts found, terminating.\n"
+    wlog "ERROR: No host found, terminating.\n"
     exit 1
 fi
 if [[ "$API_KEY" == "/etc/ipa/.panrc" ]]; then
@@ -274,10 +296,10 @@ else
     if [ -n "$CFG_FILE" ]; then
         # If a config file is parsed
         # Set defaults in case not parsed or missing from config
-        : ${EMAIL:="yes"}
+        : ${EMAIL:="no"}
         : ${BODY_HEADER:="Dear recipient,\n\nPlease check if the following certificates are still required. Renew if required, or delete if no longer in use:\n"}
         : ${BODY_FOOTER:="\n-- \nRegards,\n$(hostname)"}
-        : ${SENDER:="pan_chk_certs.sh <$(id -un)@$(hostname)>"}
+        : ${SENDER:="${0##*/} <$(id -un)@$(hostname)>"}
         
         # Test if at least one email address is configured if the send flag is set
         if [[ "$EMAIL" == "yes" ]]; then
