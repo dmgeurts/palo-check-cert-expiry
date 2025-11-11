@@ -27,7 +27,7 @@ OPTIONS:
     -k key(path|ext)  API key file location or extension. Default: /etc/ipa/.panrc
                       If a string is parsed, the following paths are searched:
                       {key(path)}/.panrc         - Example: /etc/panos/fw1.local/.panrc
-                      /etc/ipa/.panrc.{key(ext)} - Example: /etc/ipa/,panrc.fw1.local
+                      /etc/ipa/.panrc.{key(ext)} - Example: /etc/ipa/.panrc.fw1.local
     -t days           Threshold in number of days. (default: 30)
 
     -h                Display this help and exit.
