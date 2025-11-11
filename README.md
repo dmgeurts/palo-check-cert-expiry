@@ -46,8 +46,6 @@ And can also read the following from a configuration file:
 - `email_body_footer=`  Email body footer. Default: "\n-- \nRegards,\n$(hostname)"
 - `email_from=`         Sender address. Default: "${0##*/} <$(id -un)@$(hostname)>"
 
-⚠️ Note that config file options allow parsing of commands and system variables to this script, use with caution! ⚠️
-
 ## Required Palo Alto API_KEY privileges
 
 - Web UI: None
