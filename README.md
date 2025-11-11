@@ -43,7 +43,7 @@ And can also read the following from a configuration file:
 - `email_enable=`       Enable email notification (boolean yes/true, everything else=false).
 - `email_to=`           Send email to one or more addresses (comma- or space-separated)
 - `email_body_header=`  Email body header. Default: "Dear recipient,\n\nPlease check if the following certificates are still required. Renew if required, or delete if no longer in use:\n"
-- `email_body_footer=`  Email body footer. Default: "\n-- \nRegards,\n$(hostname)"
+- `email_body_footer=`  Email body footer. Default: "\n-- \nRegards,\n$(hostname)". Don't parse commands here, only strings.
 - `email_from=`         Sender address. Default: "${0##*/} <$(id -un)@$(hostname)>"
 
 ## Required Palo Alto API_KEY privileges
