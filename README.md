@@ -53,6 +53,26 @@ And can also read the following from a configuration file:
 - Command Line: None
 - REST API: None
 
+### Installation
+
+Download/upload/whatever `pan_chk_certs.sh` to the desired machine, make it executable and copy to `/usr/local/sbin`: 
+
+`chmod +x pan_chk_certs.sh`  
+`sudo cp pan_chk_certs.sh /usr/local/sbin/` 
+
+Download/create `pan_chk_certs.cfg` and place it in your desired location, for example: `/etc/panos/`; rename it if desired.
+
+Then create a cronjob to check for expired certificates on a daily/weekly/desired interval basis. For example, Monday to Friday at 7 am: 
+
+`sudo vi /etc/cron.d/pan_chk_certs` 
+
+```text
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+# Check for expired client certificates on weekdays at 7 am.
+0 7 * * 1-5 root /usr/local/sbin/pan_chk_certs.sh -k /etc/ipa/.panrc.fw01 /etc/panos/pan_chk_certs.fw01.cfg
+```
+
 ## Original Python code
 
 Update the firewall endpoints with your production firewall IPs or hostnames within the prod dictionary and test firewalls in the test dictionary. << change to config file
@@ -70,7 +90,7 @@ Utilises a bash helper script to start the Python code.
 
 A cron job should be defined to dictate how frequently the check runs: 
 
-```
+```text
 20 6 * * 1-5 BASH_ENV=/path/to/.python_profile /path/to/scripts/palo-alto/check-certs.sh
 ```
 
