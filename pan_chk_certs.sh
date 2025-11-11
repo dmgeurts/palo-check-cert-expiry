@@ -348,7 +348,7 @@ else
                 # Set the email subject line
                 SUBJECT="ALERT: Expired firewall certificates found."
                 # Send the email
-                printf "$BODY_HEADER\n\n$BODY\n\n$BODY_FOOTER\n" | s-nail -s "$SUBJECT" -r "$EMAIL_SENDER" "${SEND_TO[@]}"
+                printf "$BODY_HEADER\n$BODY\n$BODY_FOOTER" | s-nail -s "$SUBJECT" -r "$EMAIL_SENDER" "${SEND_TO[@]}"
                 wlog "Email sent to: ${SEND_TO[@]}\n"
             fi
         else
