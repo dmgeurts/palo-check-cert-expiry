@@ -2,6 +2,8 @@
 
 Check Palo Alto Certificate Expiry by API
 
+Forked from https://github.com/ip-life-net/palo-check-cert-expiry
+
 ## Bash script
 
 Written to align with Linux/Bash-based certificate management scripts.
