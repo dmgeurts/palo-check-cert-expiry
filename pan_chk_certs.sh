@@ -149,7 +149,7 @@ if [ -n "$CFG_FILE" ]; then
         wlog "ERROR: Missing 'host=' entry in in: $CFG_FILE\n"
         exit 5
     else
-        HOST=$(grep -P '^host=' "$CFG_FILE")
+        HOST=$(grep -P '^host=' "$CFG_FILE" | tr -d \")
         HOST="${HOST#host=}"
         if chk_host "$HOST"; then
             # PAN_MGMT is now set and tested as reachable
@@ -162,12 +162,12 @@ if [ -n "$CFG_FILE" ]; then
     # Try to read API key from config file if one isn't parsed
     if [[ "$API_KEY" == "/etc/ipa/.panrc" ]] && grep -q -P '^api_key=' "$CFG_FILE"; then
         (( $VERBOSE > 0 )) && wlog "API key found in: $CFG_FILE\n"
-        API_KEY=$(grep -P '^api_key=' "$CFG_FILE")
+        API_KEY=$(grep -P '^api_key=' "$CFG_FILE" | tr -d \")
         API_KEY="${API_KEY#api_key=}"
     fi
     # Try to read certificate name filter string from config file
     if grep -q -P '^crt_name_filter=' "$CFG_FILE"; then
-        CRT_FLT=$(grep -P '^crt_name_filter=' "$CFG_FILE")
+        CRT_FLT=$(grep -P '^crt_name_filter=' "$CFG_FILE" | tr -d \")
         CRT_FLT="${CRT_FLT#crt_name_filter=}"
         (( $VERBOSE > 0 )) && wlog "Certificate name filter \"$CRT_FLT\" found in: $CFG_FILE\n"
     else
@@ -175,26 +175,26 @@ if [ -n "$CFG_FILE" ]; then
     fi
     # Try to read alerting threshold from config file
     if grep -q -P '^alert_after_days=' "$CFG_FILE"; then
-        THRESHOLD_DAYS=$(grep -P '^alert_after_days=' "$CFG_FILE")
+        THRESHOLD_DAYS=$(grep -P '^alert_after_days=' "$CFG_FILE" | tr -d \")
         THRESHOLD_DAYS="${THRESHOLD_DAYS#alert_after_days=}"
         (( $VERBOSE > 0 )) && wlog "Certificate expiry threshold set to $THRESHOLD_DAYS days\n"
     fi
     # Try to read send_email boolean flag from config file (yes/no)
     if grep -q -P '^email_enable=' "$CFG_FILE"; then
-        EMAIL=$(grep -P '^email_enable=' "$CFG_FILE")
+        EMAIL=$(grep -P '^email_enable=' "$CFG_FILE" | tr -d \")
         EMAIL="${EMAIL#email_enable=}"
         (( $VERBOSE > 0 )) && wlog "email_enable=$EMAIL read from: $CFG_FILE\n"
         [[ "$EMAIL" == "true" ]] && EMAIL="yes"
     fi
     # Try to read email sender address from config file
     if grep -q -P '^email_from=' "$CFG_FILE"; then
-        EMAIL_SENDER=$(grep -P '^email_from=' "$CFG_FILE")
-        EMAIL_SENDER="${EMAIL_SENDER#email_sender=}"
+        EMAIL_SENDER=$(grep -P '^email_from=' "$CFG_FILE" | tr -d \")
+        EMAIL_SENDER="${EMAIL_SENDER#email_from=}"
         (( $VERBOSE > 0 )) && wlog "email_from=$EMAIL_SENDER setting read from: $CFG_FILE\n"
     fi
     # Try to read email target address(es) from config file
     if grep -q -P '^email_to=' "$CFG_FILE"; then
-        TO=$(grep -P '^email_to=' "$CFG_FILE")
+        TO=$(grep -P '^email_to=' "$CFG_FILE" | tr -d \")
         TO="${TO#email_to=}"
         # Accept comma and space-separated input, and convert to an array for looping
         EMAIL_TO=(${TO//,/ })
@@ -202,13 +202,13 @@ if [ -n "$CFG_FILE" ]; then
     fi
     # Try to read email body header from config file
     if grep -q -P '^email_body_header=' "$CFG_FILE"; then
-        BODY_HEADER=$(grep -P '^email_body_header=' "$CFG_FILE")
+        BODY_HEADER=$(grep -P '^email_body_header=' "$CFG_FILE" | tr -d \")
         BODY_HEADER="${BODY_HEADER#email_body_header=}"
         (( $VERBOSE > 0 )) && wlog "email_body_header read from: $CFG_FILE\n"
     fi
     # Try to read email body footer from config file
     if grep -q -P '^email_body_footer=' "$CFG_FILE"; then
-        BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE")
+        BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE" | tr -d \")
         BODY_FOOTER="${BODY_FOOTER#email_body_footer=}"
         (( $VERBOSE > 0 )) && wlog "email_body_footer read from: $CFG_FILE\n"
     fi
