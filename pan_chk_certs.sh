@@ -9,8 +9,8 @@
 API_KEY="/etc/ipa/.panrc"
 # Filter for selecting certificates to report on
 CRT_FLT="_vpn"
-# Alert threshold in days
-THRESHOLD_DAYS=30
+# Expiry threshold in days
+THRESHOLD=30
 # Script vars
 VERBOSE=0
 OPTIND=1
@@ -66,6 +66,16 @@ while getopts k:t:vh opt; do
 done
 shift "$((OPTIND-1))"   # Discard the options and sentinel --
 
+## Start logging
+# Check if the log file can be written.
+if [[ -w "$LOG" ]]; then
+    # Write first line to log.
+    wlog "START of pan_chk_certs.\n"
+else
+    echo "ERROR: Can't write to log file: $LOG. Sudo or root expected."
+    exit 1
+fi
+
 ## Host checks
 PAN_MGMT=""
 chk_host() {
@@ -78,22 +88,26 @@ chk_host() {
             exit 4 
         fi
         PAN_MGMT="$_host"
-        return 0 # Success
+        return 0 # Success / true
     else
         wlog "ERROR: '$1' is not a valid FQDN/hostname format.\n"
         # If the format is wrong, exit the script as it can't proceed
-        return 1 # Failed
+        return 1 # Failed / false
     fi
 }
 
-## Check if run as root
-if [ "$EUID" -ne 0 ]; then
-    echo "We have root"
-    root=true
-fi
-
-## Start logging
-wlog "START of pan_chk_certs.\n"
+## Read key value from file
+read_cfg() {
+    local _key=$1
+    local _file=$2
+    local _value=$(grep -P "^${_key}=" "$_file" | sed -E "s/^${_key}=\"?(.*)\"?/\1/")
+    if [[ -n "$_value" ]]; then
+        echo "$_value"
+        return 0 # true
+    else
+        return 1 # false
+    fi
+}
 
 # Check whether a file path or a single valid FQDN was parsed for the Palo Alto API interface
 CFG_FILE=""
@@ -134,22 +148,15 @@ if [[ "$API_KEY" != "/etc/ipa/.panrc" ]]; then
     fi
 fi 
 # Try to read API_KEY from file
-if grep -q -P '^api_key=' "$API_KEY"; then
+if API_KEY=$(read_cfg "api_key" "$API_KEY"); then
+    # Changes the variable from a file-path to the API KEY string
     (( $VERBOSE > 0 )) && wlog "API key read from file: $API_KEY\n"
-    # Change the variable from file-path to the actual API KEY string
-    API_KEY=$(grep -P '^api_key=' "$API_KEY")
-    API_KEY="${API_KEY#api_key=}"
 fi
 
 # Read config file
 if [ -n "$CFG_FILE" ]; then
     # Verify a hostname is included in the config file
-    if ! grep -q -P '^host=' "$CFG_FILE"; then
-        wlog "ERROR: Missing 'host=' entry in in: $CFG_FILE\n"
-        exit 5
-    else
-        HOST=$(grep -P '^host=' "$CFG_FILE" | tr -d \")
-        HOST="${HOST#host=}"
+    if HOST=$(read_cfg "host" "$CFG_FILE"); then
         if chk_host "$HOST"; then
             # PAN_MGMT is now set and tested as reachable
             (( $VERBOSE > 0 )) && wlog "Host $PAN_MGMT found in $CFG_FILE is reachable.\n"
@@ -157,58 +164,49 @@ if [ -n "$CFG_FILE" ]; then
             # Error is already logged
             exit 4
         fi
+    else
+        wlog "ERROR: Missing 'host=' entry in in: $CFG_FILE\n"
+        exit 5
     fi
-    # Try to read API key from config file if one isn't parsed
-    if [[ "$API_KEY" == "/etc/ipa/.panrc" ]] && grep -q -P '^api_key=' "$CFG_FILE"; then
+    # Try to read API key from config file if one isn't parsed with -k
+    if [[ "$API_KEY" == "/etc/ipa/.panrc" ]] && API_KEY=$(read_cfg "api_key" "$CFG_FILE"); then
         (( $VERBOSE > 0 )) && wlog "API key found in: $CFG_FILE\n"
-        API_KEY=$(grep -P '^api_key=' "$CFG_FILE" | tr -d \")
-        API_KEY="${API_KEY#api_key=}"
     fi
     # Try to read certificate name filter string from config file
-    if grep -q -P '^crt_name_filter=' "$CFG_FILE"; then
-        CRT_FLT=$(grep -P '^crt_name_filter=' "$CFG_FILE" | tr -d \")
-        CRT_FLT="${CRT_FLT#crt_name_filter=}"
+    if CRT_FLT=$(read_cfg "crt_name_filter" "$CFG_FILE"); then
         (( $VERBOSE > 0 )) && wlog "Certificate name filter \"$CRT_FLT\" found in: $CFG_FILE\n"
     else
         (( $VERBOSE > 0 )) && wlog "Default certificate name filter \"$CRT_FLT\" will be used.\n"
     fi
-    # Try to read alerting threshold from config file
-    if grep -q -P '^alert_after_days=' "$CFG_FILE"; then
-        THRESHOLD_DAYS=$(grep -P '^alert_after_days=' "$CFG_FILE" | tr -d \")
-        THRESHOLD_DAYS="${THRESHOLD_DAYS#alert_after_days=}"
-        (( $VERBOSE > 0 )) && wlog "Certificate expiry threshold set to $THRESHOLD_DAYS days\n"
+    # Try to read certificate expiry threshold from config file with -t
+    if [ -z "$THRESHOLD_DAYS" ] && THRESHOLD_DAYS=$(read_cfg "cert_exp_limit" "$CFG_FILE"); then
+        :
+    elif [ -z "$THRESHOLD_DAYS" ]; then
+        THRESHOLD_DAYS=$THRESHOLD
+    # else it's parsed with -t
     fi
+    (( $VERBOSE > 0 )) && wlog "Certificate expiry threshold set to $THRESHOLD_DAYS days\n"
     # Try to read send_email boolean flag from config file (yes/no)
-    if grep -q -P '^email_enable=' "$CFG_FILE"; then
-        EMAIL=$(grep -P '^email_enable=' "$CFG_FILE" | tr -d \")
-        EMAIL="${EMAIL#email_enable=}"
+    if EMAIL=$(read_cfg "email_enable" "$CFG_FILE"); then
         (( $VERBOSE > 0 )) && wlog "email_enable=$EMAIL read from: $CFG_FILE\n"
         [[ "$EMAIL" == "true" ]] && EMAIL="yes"
     fi
     # Try to read email sender address from config file
-    if grep -q -P '^email_from=' "$CFG_FILE"; then
-        EMAIL_SENDER=$(grep -P '^email_from=' "$CFG_FILE" | tr -d \")
-        EMAIL_SENDER="${EMAIL_SENDER#email_from=}"
+    if EMAIL_SENDER=$(read_cfg "email_from" "$CFG_FILE"); then
         (( $VERBOSE > 0 )) && wlog "email_from=$EMAIL_SENDER setting read from: $CFG_FILE\n"
     fi
     # Try to read email target address(es) from config file
-    if grep -q -P '^email_to=' "$CFG_FILE"; then
-        TO=$(grep -P '^email_to=' "$CFG_FILE" | tr -d \")
-        TO="${TO#email_to=}"
+    if TO=$(read_cfg "email_to" "$CFG_FILE"); then
         # Accept comma and space-separated input, and convert to an array for looping
         EMAIL_TO=(${TO//,/ })
         (( $VERBOSE > 0 )) && wlog "email_to=${EMAIL_TO[@]} setting read from: $CFG_FILE\n"
     fi
     # Try to read email body header from config file
-    if grep -q -P '^email_body_header=' "$CFG_FILE"; then
-        BODY_HEADER=$(grep -P '^email_body_header=' "$CFG_FILE" | tr -d \")
-        BODY_HEADER="${BODY_HEADER#email_body_header=}"
+    if BODY_HEADER=$("email_body_header" "$CFG_FILE"); then
         (( $VERBOSE > 0 )) && wlog "email_body_header read from: $CFG_FILE\n"
     fi
     # Try to read email body footer from config file
-    if grep -q -P '^email_body_footer=' "$CFG_FILE"; then
-        BODY_FOOTER=$(grep -P '^email_body_footer=' "$CFG_FILE" | tr -d \")
-        BODY_FOOTER="${BODY_FOOTER#email_body_footer=}"
+    if BODY_FOOTER=$(read_cfg "email_body_footer" "$CFG_FILE"); then
         (( $VERBOSE > 0 )) && wlog "email_body_footer read from: $CFG_FILE\n"
     fi
 fi
