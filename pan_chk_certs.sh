@@ -16,7 +16,7 @@ VERBOSE=0
 OPTIND=1
 
 ## Logging
-LOG="/var/log/pan_ckh_certs.log"
+LOG="/var/log/pan_chk_certs.log"
 wlog() {
     printf "$*"
     printf "[$(date --rfc-3339=seconds)]: $*" >> "$LOG"
