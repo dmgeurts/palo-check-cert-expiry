@@ -33,7 +33,6 @@ or Panorama.
 Either of the following must be provided:
     FQDN              Fully qualified name of the Palo Alto firewall or Panorama
                       interface. It must be reachable from this host on port TCP/443.
-                      If omitted, one or more firewalls can be parsed in a config file.
     PATH              Path to config file.
 
 OPTIONS:
