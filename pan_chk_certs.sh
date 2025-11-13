@@ -150,7 +150,7 @@ fi
 # Try to read API_KEY from file
 if API_KEY=$(read_cfg "api_key" "$API_KEY"); then
     # Changes the variable from a file-path to the API KEY string
-    (( $VERBOSE > 0 )) && wlog "API key read from file: $API_KEY\n"
+    (( $VERBOSE > 0 )) && wlog "API key read from file\n"
 fi
 
 # Read config file
