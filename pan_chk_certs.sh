@@ -169,7 +169,8 @@ if [ -n "$CFG_FILE" ]; then
         exit 5
     fi
     # Try to read API key from config file if one isn't parsed with -k
-    if [[ "$API_KEY" == "/etc/ipa/.panrc" ]] && API_KEY=$(read_cfg "api_key" "$CFG_FILE"); then
+    if [[ "$API_KEY" == "/etc/ipa/.panrc" ]] && TEST=$(read_cfg "api_key" "$CFG_FILE"); then
+        API_KEY="$TEST"
         (( $VERBOSE > 0 )) && wlog "API key found in: $CFG_FILE\n"
     fi
     # Try to read certificate name filter string from config file
